@@ -10,8 +10,6 @@ name: Java CI with Gradle
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -21,20 +19,55 @@ jobs:
       contents: read
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
-    # See: https://github.com/gradle/actions/blob/main/setup-gradle/README.md
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3.1.0
+      # Configure Gradle for optimal use in GitHub Actions, including caching of downloaded dependencies.
+      # See: https://github.com/gradle/actions/blob/main/setup-gradle/README.md
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3.1.0
 
-    - name: Build with Gradle Wrapper
-      run: ./gradlew build
+      - name: Print Environment Variables
+        run: |
+          echo "SPRING_PROFILES_ACTIVE: $SPRING_PROFILES_ACTIVE"
+          printenv
+
+      - name: Start Redis
+        uses: supercharge/redis-github-action@1.1.0
+        with:
+          redis-version: 6
+
+      - name: Build with Gradle Wrapper
+        run: |
+          ./gradlew build -x test
+
+      - name: Build Docker Image
+        run: docker build -t ${{ secrets.CONTAINER_REGISTRY_PUBLIC_END_POINT }}/joy-mall-kafka:latest .
+
+      - name: Docker Login
+        run: docker login ${{ secrets.CONTAINER_REGISTRY_PUBLIC_END_POINT }} -u ${{ secrets.NCLOUD_ACCESS_KEY }} -p ${{ secrets.NCLOUD_SECRET_KEY }}
+
+      - name: Push to Container Registry
+        run: docker push ${{ secrets.CONTAINER_REGISTRY_PUBLIC_END_POINT }}/joy-mall-kafka:latest
+
+      - name: Login to Bastion Server && k8s Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.BASTION_SERVER_HOST }}
+          username: ${{ secrets.BASTION_SERVER_USERNAME }}
+          password: ${{ secrets.BASTION_SERVER_PASSWORD }}
+          key: ${{ secrets.JOYMALL_KEY_PEM }}
+          script: |
+            chmod +x ./ncp-iam-authenticator
+            cp ./ncp-iam-authenticator $HOME/bin/ncp-iam-authenticator
+            export PATH=$PATH:$HOME/bin
+            echo 'export PATH=$PATH:$HOME/bin' >> ~/.bash_profile
+            ncp-iam-authenticator help
+            kubectl get pods
 
     # NOTE: The Gradle Wrapper is the default and recommended way to run Gradle (https://docs.gradle.org/current/userguide/gradle_wrapper.html).
     # If your project does not have the Gradle Wrapper configured, you can use the following configuration to run Gradle with a specified version.
@@ -54,14 +87,14 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-    # Generates and submits a dependency graph, enabling Dependabot Alerts for all project dependencies.
-    # See: https://github.com/gradle/actions/blob/main/dependency-submission/README.md
-    - name: Generate and submit dependency graph
-      uses: gradle/actions/dependency-submission@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3.1.0
+      # Generates and submits a dependency graph, enabling Dependabot Alerts for all project dependencies.
+      # See: https://github.com/gradle/actions/blob/main/dependency-submission/README.md
+      - name: Generate and submit dependency graph
+        uses: gradle/actions/dependency-submission@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3.1.0
