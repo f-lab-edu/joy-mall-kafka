@@ -25,7 +25,7 @@ public class SalesProductListener {
 
     private static final String LOCK_KEY_PREFIX = "salesProduct:";
 
-    @KafkaListener(topics = "stock-decrease", groupId = "stock-decrease-group")
+    @KafkaListener(topics = "new-stock-decrease", groupId = "stock-decrease-group")
     public void decreaseStock(ConsumerRecord<String, String> record) {
         Type orderItemSetType = new TypeToken<List<OrderItemDTO>>(){}.getType();
         List<OrderItemDTO> orderItems = gson.fromJson(record.value(), orderItemSetType);
